@@ -33,7 +33,7 @@ catch (Exception exception)
     app.Logger.LogError(
         exception,
         "Не удалось подготовить схему БД. Приложение продолжает работу. "
-        + "Проверьте, что PostgreSQL запущен (docker compose up -d) и настройки верны.");
+        + "Проверьте, что PostgreSQL запущен (docker compose up -d postgres) и настройки верны.");
 }
 
 if (app.Environment.IsDevelopment())
