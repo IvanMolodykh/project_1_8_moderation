@@ -54,7 +54,9 @@ backend/
 ├── Paper.Infrastructure/   работа с PostgreSQL, вся DI-регистрация
 ├── PaperAPI/               HTTP-слой и точка сборки зависимостей
 ├── Paper.slnx
-└── docker-compose.yml
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
 
 Направление зависимостей строго внутрь:
@@ -79,19 +81,51 @@ dotnet build backend/Paper.slnx
 
 ### Требования
 
-- .NET SDK 8.0 или выше (проверено на 10.0.401)
-- PostgreSQL 16+ — любым способом, см. ниже
-- Docker Desktop — только если идёте первым способом
+- Docker Desktop — для стенда одной командой
+- .NET SDK 8.0 или выше (проверено на 10.0.401) — только если API запускается на машине, а не в контейнере
+- PostgreSQL 16+ — только если база ставится программой, без Docker
 
-### Способ 1: PostgreSQL в Docker
+### Способ 1: весь стенд одной командой
+
+Из папки `backend`:
+
+```bash
+docker compose up --build -d --wait
+```
+
+Команда собирает API, поднимает PostgreSQL и веб-интерфейс базы. Первый запуск
+дольше: скачиваются образы и собирается приложение. `--wait` завершится, когда
+API и база станут `healthy`.
+
+| Что проверить | Адрес |
+|---|---|
+| Swagger | http://localhost:5009/swagger |
+| API и подключение к базе | http://localhost:5009/api/health |
+| База в браузере (Adminer) | http://localhost:8081/?pgsql=&username=postgres&db=moderationdb |
+
+Форма Adminer уже заполнена: система PostgreSQL, сервер `postgres`, пользователь
+`postgres`, база `moderationdb`. Остаётся ввести пароль `postgres` и нажать Login.
+Таблица `users` содержит трёх тестовых пользователей — те же данные отдаёт `GET /api/users`.
+
+Та же база открывается из DBeaver, DataGrip или `psql`: хост `localhost`, порт
+`5432`, база `moderationdb`, пользователь и пароль `postgres`.
+
+Остановка: `docker compose down`. Вместе с данными: `docker compose down -v`.
+
+Если порт `5432`, `5009` или `8081` занят, скопируйте `.env.example` в `.env`
+и поменяйте `POSTGRES_PORT`, `API_PORT` или `ADMINER_PORT`.
+
+### Способ 2: API на машине, база в Docker
 
 ```bash
 cd backend
-docker compose up -d
-docker compose ps          # дождаться статуса healthy
+docker compose up -d postgres
+dotnet run --project PaperAPI
 ```
 
-### Способ 2: локальный PostgreSQL
+Swagger: **http://localhost:5009/swagger**. Остановить API — `Ctrl+C`.
+
+### Способ 3: локальный PostgreSQL
 
 Установите PostgreSQL обычной программой, при установке задайте пароль `postgres`
 и кодировку UTF-8. Затем создайте базу:
@@ -101,25 +135,15 @@ createdb -U postgres moderationdb
 ```
 
 Приложение создаёт таблицы само при первом запуске, вручную ничего делать не нужно.
+Дальше тот же `dotnet run --project PaperAPI`.
 
-### Запуск приложения
-
-```bash
-cd backend
-dotnet run --project PaperAPI
-```
-
-После старта в консоли появятся строки:
+После старта локального API в консоли появятся строки:
 
 ```
 PostgreSQL: localhost:5432/moderationdb (user=postgres, pool=0..10)
 Схема готова: таблица users создана или уже существует
 Now listening on: http://localhost:5009
 ```
-
-Swagger: **http://localhost:5009/swagger**
-
-Остановить — `Ctrl+C` в консоли.
 
 ### Конфигурация окружений
 
@@ -373,10 +397,12 @@ Scoped-сервис, запрошенный из корневого контей
 ## 10. Полезные команды
 
 ```bash
-dotnet build backend/Paper.slnx          # собрать решение
-dotnet run --project backend/PaperAPI    # запустить API
-docker compose up -d                     # поднять PostgreSQL
-docker compose logs -f postgres          # логи базы
-docker compose down -v                   # удалить базу вместе с данными
+docker compose up --build -d --wait      # API, Swagger, PostgreSQL и Adminer
+docker compose ps                        # статусы контейнеров
+docker compose logs -f api               # логи API
+docker compose up -d postgres            # только база, если API запускается через dotnet
+docker compose down -v                   # удалить стенд вместе с данными
+dotnet build backend/Paper.slnx          # собрать решение на машине
+dotnet run --project backend/PaperAPI    # запустить API на машине
 curl http://localhost:5009/api/health    # проверка работоспособности
 ```
