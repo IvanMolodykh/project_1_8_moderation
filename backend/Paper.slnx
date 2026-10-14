@@ -1,6 +1,6 @@
 <Solution>
-  <Project Path="Paper.Application/Paper.Application.csproj" />
-  <Project Path="Paper.Domain/Paper.Domain.csproj" />
-  <Project Path="Paper.Infrastructure/Paper.Infrastructure.csproj" />
-  <Project Path="PaperAPI/PaperAPI.csproj" />
+  <Project Path="Application/Application.csproj" />
+  <Project Path="Domain/Domain.csproj" />
+  <Project Path="Infrastructure/Infrastructure.csproj" />
+  <Project Path="API/API.csproj" />
 </Solution>

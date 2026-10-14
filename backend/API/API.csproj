@@ -11,9 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Paper.Domain\Paper.Domain.csproj" />
-    <ProjectReference Include="..\Paper.Application\Paper.Application.csproj" />
-    <ProjectReference Include="..\Paper.Infrastructure\Paper.Infrastructure.csproj" />
+    <ProjectReference Include="..\Paper.Domain\Domain.csproj" />
+    <ProjectReference Include="..\Paper.Application\Application.csproj" />
+    <ProjectReference Include="..\Paper.Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
