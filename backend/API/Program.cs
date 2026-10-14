@@ -1,6 +1,5 @@
-//using Application; // Для подключения сервисов Application и XML-комментариев DTO
+
 using Application.DependencyInjections;
-using Infrastructure; // Для AddInfrastructure()
 using Infrastructure.Authentication;
 using Infrastructure.DependencyInjections;
 using Infrastructure.Persistence; // Для AppDbContext при авто-миграции
@@ -56,7 +55,7 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
-// 4. Настраиваем Swagger (Swashbuckle) + XML-комментарии + кнопку Authorize для JWT
+// 4. Настраиваем Swagger (Swashbuckle) + кнопку Authorize для JWT
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {

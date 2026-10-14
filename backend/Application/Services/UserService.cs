@@ -96,7 +96,7 @@ public class UserService(IAppDbContext db, IJwtProvider jwtProvider) : IUserServ
             UserId = user.Id,
             TokenHash = HashToken(refreshTokenString),
             ExpiresAt = DateTime.UtcNow.AddDays(7),
-            User = user // EF Core автоматически свяжет их при сохранении
+            User = user
         };
 
         db.Users.Add(user);
@@ -146,7 +146,7 @@ public class UserService(IAppDbContext db, IJwtProvider jwtProvider) : IUserServ
         };
     }
 
-    // Вспомогательный метод для хеширования SHA-256 (согласно ТЗ к БД)
+    // Вспомогательный метод для хеширования SHA-256
     private static string HashToken(string token)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
