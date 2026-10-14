@@ -1,12 +1,13 @@
-namespace Paper.Domain.Entities;
+namespace Domain.Entities;
 
-public sealed class User
+public class User
 {
-    public int Id { get; init; }
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public string Name { get; init; } = string.Empty;
-
-    public string Email { get; init; } = string.Empty;
-
-    public DateTimeOffset CreatedAt { get; init; }
+    // Навигационное свойство: список всех refresh-токенов пользователя
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

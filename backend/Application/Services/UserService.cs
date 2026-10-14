@@ -1,61 +1,98 @@
-using Paper.Application.Abstractions;
-using Paper.Application.DTOs;
-using Paper.Application.Mapping;
-using Paper.Domain.Abstractions;
+﻿// Файл: Application/Services/UserService.cs
+using Application.DTOs.auth;
 
-namespace Paper.Application.Services;
+using Application.Interfaces;
+using Application.Interfaces.Services;
+using BCrypt.Net;
+using Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
-public sealed class UserService : IUserService
+
+
+namespace Application.Services;
+
+public class UserService(IAppDbContext db, IJwtProvider jwtProvider) : IUserService
 {
-    private readonly IUserRepository _users;
-    private readonly IAppLogger _logger;
-
-    public UserService(IUserRepository users, IAppLogger logger)
+    public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request, CancellationToken ct = default)
     {
-        _users = users;
-        _logger = logger;
+        var email = request.Email.Trim().ToLowerInvariant();
+
+        if (await db.Users.AnyAsync(u => u.Email == email, ct))
+        {
+            throw new ArgumentException("Пользователь с таким email уже существует.");
+        }
+
+        var user = new User
+        {
+            Email = email,
+            DisplayName = request.DisplayName,
+            PasswordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(request.Password)
+        };
+
+        var accessToken = jwtProvider.GenerateAccessToken(user);
+        var refreshTokenString = jwtProvider.GenerateRefreshToken();
+
+        var refreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = HashToken(refreshTokenString),
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            User = user // EF Core автоматически свяжет их при сохранении
+        };
+
+        db.Users.Add(user);
+        db.RefreshTokens.Add(refreshToken);
+        await db.SaveChangesAsync(ct);
+
+        return new RegisterResponseDto
+        {
+            Tokens = new DTOs.auth.Tokens.TokensAcReDto
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshTokenString
+            }
+        };
     }
 
-    public async Task<IReadOnlyList<UserDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request, CancellationToken ct = default)
     {
-        var users = await _users.GetAllAsync(cancellationToken);
-        return users.Select(u => u.ToDto()).ToArray();
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+
+        if (user == null || !BCrypt.Net.BCrypt.EnhancedVerify(request.Password, user.PasswordHash))
+        {
+            throw new UnauthorizedAccessException("Неверный email или пароль.");
+        }
+
+        var accessToken = jwtProvider.GenerateAccessToken(user);
+        var refreshTokenString = jwtProvider.GenerateRefreshToken();
+
+        var refreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = HashToken(refreshTokenString),
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        };
+
+        db.RefreshTokens.Add(refreshToken);
+        await db.SaveChangesAsync(ct);
+
+        return new LoginResponseDto
+        {
+            Tokens = new DTOs.auth.Tokens.TokensAcReDto
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshTokenString
+            }
+        };
     }
 
-    public async Task<UserDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    // Вспомогательный метод для хеширования SHA-256 (согласно ТЗ к БД)
+    private static string HashToken(string token)
     {
-        var user = await _users.GetByIdAsync(id, cancellationToken);
-        return user?.ToDto();
-    }
-
-    public async Task<UserDto> CreateAsync(CreateUserDto dto, CancellationToken cancellationToken = default)
-    {
-        EnsureValid(dto);
-
-        var created = await _users.AddAsync(dto.Name.Trim(), dto.Email.Trim(), cancellationToken);
-
-        _logger.LogInformation("Создан пользователь {UserId} ({Email})", created.Id, created.Email);
-        return created.ToDto();
-    }
-
-    public Task<int> CountAsync(CancellationToken cancellationToken = default)
-        => _users.CountAsync(cancellationToken);
-
-    private static void EnsureValid(CreateUserDto dto)
-    {
-        if (dto is null)
-            throw new ArgumentNullException(nameof(dto));
-
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            throw new ArgumentException("Имя обязательно.", nameof(CreateUserDto.Name));
-
-        if (dto.Name.Length > 100)
-            throw new ArgumentException("Имя не длиннее 100 символов.", nameof(CreateUserDto.Name));
-
-        if (string.IsNullOrWhiteSpace(dto.Email))
-            throw new ArgumentException("Email обязателен.", nameof(CreateUserDto.Email));
-
-        if (!dto.Email.Contains('@', StringComparison.Ordinal))
-            throw new ArgumentException("Некорректный email.", nameof(CreateUserDto.Email));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }
