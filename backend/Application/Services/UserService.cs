@@ -1,6 +1,6 @@
 ﻿// Файл: Application/Services/UserService.cs
 using Application.DTOs.auth;
-
+using Application.DTOs.auth.Tokens;
 using Application.Interfaces;
 using Application.Interfaces.Services;
 using BCrypt.Net;
@@ -15,6 +15,63 @@ namespace Application.Services;
 
 public class UserService(IAppDbContext db, IJwtProvider jwtProvider) : IUserService
 {
+
+
+    public async Task<TokensAcReDto> RefreshTokenAsync(RefreshTokenRequestDto request, CancellationToken ct = default)
+    {
+        var tokenHash = HashToken(request.RefreshToken);
+
+        // Ищем токен в БД вместе с пользователем (Include нужен, чтобы потом сгенерировать Access-токен)
+        var existingToken = await db.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, ct);
+
+        // Проверяем: существует ли токен, не отозван ли он и не истёк ли срок годности
+        if (existingToken == null || existingToken.RevokedAt != null || existingToken.ExpiresAt < DateTime.UtcNow)
+        {
+            throw new UnauthorizedAccessException("Невалидный или просроченный Refresh Token.");
+        }
+
+        // Помечаем старый токен как отозванный (Token Rotation)
+        existingToken.RevokedAt = DateTime.UtcNow;
+
+        // Генерируем новую пару токенов
+        var newAccessToken = jwtProvider.GenerateAccessToken(existingToken.User);
+        var newRefreshTokenString = jwtProvider.GenerateRefreshToken();
+
+        var newRefreshToken = new RefreshToken
+        {
+            UserId = existingToken.User.Id,
+            TokenHash = HashToken(newRefreshTokenString),
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        };
+
+        db.RefreshTokens.Add(newRefreshToken);
+        await db.SaveChangesAsync(ct);
+
+        return new TokensAcReDto
+        {
+            AccessToken = newAccessToken,
+            RefreshToken = newRefreshTokenString
+        };
+    }
+
+    public async Task LogoutAsync(LogoutRequestDto request, CancellationToken ct = default)
+    {
+        var tokenHash = HashToken(request.RefreshToken);
+
+        // Ищем токен
+        var existingToken = await db.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, ct);
+
+        // Если токен найден и ещё не отозван — отзываем его
+        if (existingToken != null && existingToken.RevokedAt == null)
+        {
+            existingToken.RevokedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
     public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request, CancellationToken ct = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
