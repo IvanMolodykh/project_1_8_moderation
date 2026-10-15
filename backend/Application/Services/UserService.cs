@@ -1,4 +1,5 @@
 ﻿// Файл: Application/Services/UserService.cs
+using Domain.Exceptions;
 using Application.DTOs.auth;
 using Application.DTOs.auth.Tokens;
 using Application.Interfaces;
@@ -78,7 +79,7 @@ public class UserService(IAppDbContext db, IJwtProvider jwtProvider) : IUserServ
 
         if (await db.Users.AnyAsync(u => u.Email == email, ct))
         {
-            throw new ArgumentException("Пользователь с таким email уже существует.");
+            throw new ConflictException("Пользователь с таким email уже существует.");
         }
 
         var user = new User
